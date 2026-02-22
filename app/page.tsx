@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShoppingCart,
@@ -19,6 +19,9 @@ import {
   Package,
   Settings,
   Upload,
+  CheckCircle2,
+  Clock3,
+  Trash2,
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,44 +38,21 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 
-/**
- * Dragon Mart Online — demo storefront (front-end only)
- * ✅ Add products from Admin
- * ✅ Multiple pictures + multiple videos per product
- * ✅ Delete product
- * ✅ New category added: Luggage and Bags
- * ✅ Owner Admin credentials + extra admin approval (demo/localStorage)
- */
+const MAIN_ADMIN_EMAIL = "hanif9591@gmail.com";
+const MAIN_ADMIN_PASSWORD = "Aliza9591#";
 
 function DragonMartLogo({ className = "h-9 w-9" }: { className?: string }) {
   return (
     <div className={`rounded-2xl bg-white/10 grid place-items-center ${className}`}>
-      <svg
-        width="22"
-        height="22"
-        viewBox="0 0 24 24"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        aria-hidden="true"
-      >
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path
           d="M6 14c2.8-5.6 7.2-8.4 12-9-1.2 2.6-1.8 4.9-1.8 7.2C16.2 17 12.3 20 8.3 20c-2 0-3.6-0.7-4.3-2.1-.5-1 .2-2.6 2-3.9Z"
           stroke="currentColor"
           strokeWidth="1.6"
           strokeLinejoin="round"
         />
-        <path
-          d="M10.2 10.5c.8-1.4 2.1-2.7 3.8-3.8"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-        />
-        <path
-          d="M16.8 12.2c.8.4 1.4 1 1.8 1.8"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-        />
+        <path d="M10.2 10.5c.8-1.4 2.1-2.7 3.8-3.8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        <path d="M16.8 12.2c.8.4 1.4 1 1.8 1.8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
       </svg>
     </div>
   );
@@ -88,7 +68,7 @@ const CATEGORIES = [
   "Books",
   "Auto Spare Parts",
   "Toys and Games",
-  "Luggage and Bags",
+  "Luggage and Bags", // ✅ added
 ];
 
 type Product = {
@@ -96,11 +76,11 @@ type Product = {
   title: string;
   category: string;
   price: number;
-  rating: number;
-  reviews: number;
+  rating: number; // average rating
+  reviews: number; // count of reviews
   prime: boolean;
   stock: number;
-  img: string;
+  img: string; // main image (url or base64)
   images?: string[];
   videos?: string[];
   desc: string;
@@ -109,84 +89,31 @@ type Product = {
 type Order = {
   id: string;
   createdAt: string;
-  status: string;
+  status: string; // COD pending etc
   total: number;
   items: { productId: string; title: string; qty: number; price: number }[];
   userEmail: string;
+  paymentMethod: "COD";
 };
 
-// ----------------- Admin auth (DEMO) -----------------
-// ⚠️ প্রোডাকশনে এভাবে password রাখবেন না (frontend/localStorage insecure).
-// Backend + env + bcrypt hashing ব্যবহার করুন।
-const OWNER_ADMIN_EMAIL = "hanif9591@gmail.com";
-const OWNER_ADMIN_PASSWORD = "Aliza9591#";
+type Review = {
+  id: string;
+  productId: string;
+  userEmail: string;
+  userName: string;
+  rating: number; // 1..5
+  comment: string;
+  createdAt: string;
+};
 
-type LocalUser = { name: string; email: string; password: string };
-type AdminRequest = { email: string; name: string; createdAt: string };
-
-function readJSON<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function writeJSON(key: string, value: any) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {}
-}
-
-function getUsers(): Record<string, LocalUser> {
-  return readJSON<Record<string, LocalUser>>("dmo_users", {});
-}
-
-function saveUser(u: LocalUser) {
-  const users = getUsers();
-  users[u.email.toLowerCase()] = u;
-  writeJSON("dmo_users", users);
-}
-
-function getApprovedAdmins(): string[] {
-  return readJSON<string[]>("dmo_admin_approved", []);
-}
-
-function approveAdmin(email: string) {
-  const e = email.toLowerCase();
-  const list = Array.from(new Set([...getApprovedAdmins(), e]));
-  writeJSON("dmo_admin_approved", list);
-}
-
-function removeApprovedAdmin(email: string) {
-  const e = email.toLowerCase();
-  writeJSON(
-    "dmo_admin_approved",
-    getApprovedAdmins().filter((x) => x !== e)
-  );
-}
-
-function getAdminRequests(): AdminRequest[] {
-  return readJSON<AdminRequest[]>("dmo_admin_requests", []);
-}
-
-function addAdminRequest(req: AdminRequest) {
-  const list = getAdminRequests();
-  const e = req.email.toLowerCase();
-  if (list.some((r) => r.email.toLowerCase() === e)) return; // duplicate avoid
-  list.unshift({ ...req, email: e });
-  writeJSON("dmo_admin_requests", list);
-}
-
-function removeAdminRequest(email: string) {
-  const e = email.toLowerCase();
-  writeJSON(
-    "dmo_admin_requests",
-    getAdminRequests().filter((r) => r.email.toLowerCase() !== e)
-  );
-}
-// -----------------------------------------------------
+type Session =
+  | null
+  | {
+      id: string;
+      name: string;
+      email: string;
+      role: "customer" | "admin" | "pending_admin";
+    };
 
 const DEMO_PRODUCTS: Product[] = [
   {
@@ -201,8 +128,7 @@ const DEMO_PRODUCTS: Product[] = [
     img: "https://images.unsplash.com/photo-1518441902117-f0a9e9f8d1d4?auto=format&fit=crop&w=1200&q=60",
     images: ["https://images.unsplash.com/photo-1518441902117-f0a9e9f8d1d4?auto=format&fit=crop&w=1200&q=60"],
     videos: [],
-    desc:
-      "Immersive sound, all-day comfort, and adaptive noise cancelling for work, travel, and everything in between.",
+    desc: "Immersive sound, all-day comfort, and adaptive noise cancelling for work, travel, and everything in between.",
   },
   {
     id: "p2",
@@ -216,8 +142,7 @@ const DEMO_PRODUCTS: Product[] = [
     img: "https://images.unsplash.com/photo-1559245010-6564f5d4f8c5?auto=format&fit=crop&w=1200&q=60",
     images: ["https://images.unsplash.com/photo-1559245010-6564f5d4f8c5?auto=format&fit=crop&w=1200&q=60"],
     videos: [],
-    desc:
-      "Sync colors to your mood. Voice control, scenes, and easy setup for bedrooms, desks, and gaming rooms.",
+    desc: "Sync colors to your mood. Voice control, scenes, and easy setup for bedrooms, desks, and gaming rooms.",
   },
   {
     id: "p3",
@@ -229,17 +154,15 @@ const DEMO_PRODUCTS: Product[] = [
     prime: false,
     stock: 120,
     img: "https://images.unsplash.com/photo-1526401485004-2fda9f6d3d38?auto=format&fit=crop&w=1200&q=60",
-    images: ["https://images.unsplash.com/photo-1526401485004-2fda9f6d3d38?auto=format&fit=crop&w=1200&q=60"],
+    images: ["https://images.unsplash.com/photo-1526401485004-2fda9e9f8d1d4?auto=format&fit=crop&w=1200&q=60".replace("1526401485004-2fda9e9f8d1d4", "1526401485004-2fda9f6d3d38")],
     videos: [],
-    desc:
-      "Double-wall insulation keeps drinks cold for up to 24h. Leak-proof cap and durable powder coat.",
+    desc: "Double-wall insulation keeps drinks cold for up to 24h. Leak-proof cap and durable powder coat.",
   },
 ];
 
 function formatMoneyAED(n: number) {
   return n.toLocaleString(undefined, { style: "currency", currency: "AED" });
 }
-
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
@@ -251,60 +174,72 @@ function Stars({ value }: { value: number }) {
     const idx = i + 1;
     const filled = idx <= full || (idx === full + 1 && half);
     return (
-      <Star
-        key={i}
-        className={`h-4 w-4 ${filled ? "" : "opacity-30"}`}
-        fill={filled ? "currentColor" : "none"}
-      />
+      <Star key={i} className={`h-4 w-4 ${filled ? "" : "opacity-30"}`} fill={filled ? "currentColor" : "none"} />
     );
   });
   return <div className="flex items-center gap-0.5">{stars}</div>;
 }
 
-function useSession() {
-  const [session, setSession] = useState<any>(() => {
-    try {
-      const raw = localStorage.getItem("dmo_session");
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
-    }
-  });
+function safeJsonParse<T>(raw: string | null, fallback: T): T {
+  try {
+    if (!raw) return fallback;
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
 
+function useSession() {
+  const [session, setSession] = useState<Session>(() => safeJsonParse<Session>(localStorage.getItem("dmo_session"), null));
   useEffect(() => {
     try {
       localStorage.setItem("dmo_session", JSON.stringify(session));
     } catch {}
   }, [session]);
-
   return { session, setSession };
 }
 
-function TopNav({
-  query,
-  setQuery,
-  category,
-  setCategory,
-  cartCount,
-  onOpenCart,
-  page,
-  setPage,
-  session,
-  onOpenAuth,
-  onLogout,
-}: {
+function getApprovedAdmins(): string[] {
+  return safeJsonParse<string[]>(localStorage.getItem("dmo_admins"), [MAIN_ADMIN_EMAIL]);
+}
+function setApprovedAdmins(xs: string[]) {
+  try {
+    localStorage.setItem("dmo_admins", JSON.stringify(xs));
+  } catch {}
+}
+function getPendingAdmins(): string[] {
+  return safeJsonParse<string[]>(localStorage.getItem("dmo_pending_admins"), []);
+}
+function setPendingAdmins(xs: string[]) {
+  try {
+    localStorage.setItem("dmo_pending_admins", JSON.stringify(xs));
+  } catch {}
+}
+
+function getReviews(): Review[] {
+  return safeJsonParse<Review[]>(localStorage.getItem("dmo_reviews"), []);
+}
+function setReviews(xs: Review[]) {
+  try {
+    localStorage.setItem("dmo_reviews", JSON.stringify(xs));
+  } catch {}
+}
+
+function TopNav(props: {
   query: string;
   setQuery: (v: string) => void;
   category: string;
   setCategory: (v: string) => void;
   cartCount: number;
   onOpenCart: () => void;
-  page: string;
-  setPage: (v: string) => void;
-  session: any;
+  page: "home" | "orders" | "admin";
+  setPage: (v: "home" | "orders" | "admin") => void;
+  session: Session;
   onOpenAuth: () => void;
   onLogout: () => void;
 }) {
+  const { query, setQuery, category, setCategory, cartCount, onOpenCart, page, setPage, session, onOpenAuth, onLogout } = props;
+
   return (
     <div className="sticky top-0 z-40">
       <div className="bg-gradient-to-r from-red-700 via-red-600 to-orange-500 text-white">
@@ -373,27 +308,28 @@ function TopNav({
                 <ChevronDown className="h-4 w-4 ml-1" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuContent align="end" className="w-64">
               {!session ? (
                 <DropdownMenuItem onClick={onOpenAuth}>
                   <User className="h-4 w-4 mr-2" /> Login / Signup
                 </DropdownMenuItem>
               ) : (
                 <>
-                  <DropdownMenuItem
-                    onClick={() => setPage("orders")}
-                    className={page === "orders" ? "font-semibold" : ""}
-                  >
+                  <DropdownMenuItem onClick={() => setPage("orders")} className={page === "orders" ? "font-semibold" : ""}>
                     <Package className="h-4 w-4 mr-2" /> Orders
                   </DropdownMenuItem>
 
-                  {(session.role === "admin" || session.role === "owner") && (
-                    <DropdownMenuItem
-                      onClick={() => setPage("admin")}
-                      className={page === "admin" ? "font-semibold" : ""}
-                    >
+                  {session.role === "admin" && (
+                    <DropdownMenuItem onClick={() => setPage("admin")} className={page === "admin" ? "font-semibold" : ""}>
                       <Settings className="h-4 w-4 mr-2" /> Admin
                     </DropdownMenuItem>
+                  )}
+
+                  {session.role === "pending_admin" && (
+                    <div className="px-3 py-2 text-xs text-muted-foreground">
+                      <Clock3 className="inline h-4 w-4 mr-1" />
+                      Admin request pending (Main Admin approval needed)
+                    </div>
                   )}
 
                   <DropdownMenuSeparator />
@@ -424,9 +360,15 @@ function TopNav({
             </button>
           ))}
           <div className="ml-auto hidden md:flex items-center gap-4 text-xs">
-            <div className="flex items-center gap-1"><Truck className="h-4 w-4" /> Fast delivery</div>
-            <div className="flex items-center gap-1"><ShieldCheck className="h-4 w-4" /> Secure payments</div>
-            <div className="flex items-center gap-1"><RotateCcw className="h-4 w-4" /> Easy returns</div>
+            <div className="flex items-center gap-1">
+              <Truck className="h-4 w-4" /> Fast delivery
+            </div>
+            <div className="flex items-center gap-1">
+              <ShieldCheck className="h-4 w-4" /> Cash on Delivery
+            </div>
+            <div className="flex items-center gap-1">
+              <RotateCcw className="h-4 w-4" /> Easy returns
+            </div>
           </div>
         </div>
       </div>
@@ -444,11 +386,9 @@ function Hero({ onShop }: { onShop: () => void }) {
             <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs">
               <span className="h-1.5 w-1.5 rounded-full bg-white" /> Deals updated daily
             </div>
-            <h1 className="mt-4 text-2xl md:text-4xl font-black tracking-tight">
-              Dragon Mart Online — shop smart, save big.
-            </h1>
+            <h1 className="mt-4 text-2xl md:text-4xl font-black tracking-tight">Dragon Mart Online — shop smart, save big.</h1>
             <p className="mt-3 text-white/80">
-              Amazon-style UI with search, filters, cart, login, orders, and admin upload.
+              Search, filters, cart, login, orders, admin upload, reviews & Cash on Delivery.
             </p>
             <div className="mt-5 flex gap-2">
               <Button onClick={onShop} className="rounded-2xl bg-white text-zinc-900 hover:bg-white/90">
@@ -461,7 +401,7 @@ function Hero({ onShop }: { onShop: () => void }) {
           </div>
           <div className="rounded-3xl bg-white/10 p-4">
             <div className="grid grid-cols-2 gap-3">
-              {["Prime picks", "Top rated", "Home refresh", "New arrivals"].map((t) => (
+              {["Prime picks", "Top rated", "Luggage & Bags", "New arrivals"].map((t) => (
                 <div key={t} className="rounded-2xl bg-white/10 p-4 text-sm font-semibold">
                   {t}
                   <div className="mt-2 text-xs font-normal text-white/70">Save up to 40%</div>
@@ -531,14 +471,7 @@ function sortLabel(sort: string) {
   return "Featured";
 }
 
-function FiltersBar({
-  sort,
-  setSort,
-  onlyPrime,
-  setOnlyPrime,
-  priceMax,
-  setPriceMax,
-}: {
+function FiltersBar(props: {
   sort: string;
   setSort: (v: string) => void;
   onlyPrime: boolean;
@@ -546,6 +479,8 @@ function FiltersBar({
   priceMax: number;
   setPriceMax: React.Dispatch<React.SetStateAction<number>>;
 }) {
+  const { sort, setSort, onlyPrime, setOnlyPrime, priceMax, setPriceMax } = props;
+
   return (
     <div className="mx-auto max-w-6xl px-4 mt-6">
       <div className="flex flex-col md:flex-row md:items-center gap-3">
@@ -590,16 +525,7 @@ function FiltersBar({
   );
 }
 
-function CartSheet({
-  open,
-  setOpen,
-  items,
-  onInc,
-  onDec,
-  onRemove,
-  total,
-  onCheckout,
-}: {
+function CartSheet(props: {
   open: boolean;
   setOpen: (v: boolean) => void;
   items: { product: Product; qty: number }[];
@@ -609,6 +535,8 @@ function CartSheet({
   total: number;
   onCheckout: () => void;
 }) {
+  const { open, setOpen, items, onInc, onDec, onRemove, total, onCheckout } = props;
+
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetContent className="w-full sm:max-w-md">
@@ -658,9 +586,9 @@ function CartSheet({
           </div>
           <div className="mt-3">
             <Button className="w-full rounded-2xl" disabled={items.length === 0} onClick={onCheckout}>
-              Checkout (Stripe)
+              Place Order (Cash on Delivery)
             </Button>
-            <div className="mt-2 text-xs text-muted-foreground">Demo mode—connect Stripe backend to charge.</div>
+            <div className="mt-2 text-xs text-muted-foreground">Payment method: Cash on Delivery (COD)</div>
           </div>
         </div>
       </SheetContent>
@@ -685,30 +613,37 @@ function toYouTubeEmbed(url: string) {
   }
 }
 
-function ProductDialog({
-  open,
-  setOpen,
-  product,
-  onAdd,
-}: {
+function ProductDialog(props: {
   open: boolean;
   setOpen: (v: boolean) => void;
   product: Product | null;
   onAdd: (p: Product) => void;
+  session: Session;
+  reviewsByProduct: Record<string, Review[]>;
+  onSubmitReview: (productId: string, rating: number, comment: string) => void;
 }) {
+  const { open, setOpen, product, onAdd, session, reviewsByProduct, onSubmitReview } = props;
+
   const gallery = product?.images?.length ? product.images : product ? [product.img] : [];
   const videos = product?.videos?.length ? product.videos : [];
   const [activeIdx, setActiveIdx] = useState(0);
 
+  const [myRating, setMyRating] = useState<number>(5);
+  const [myComment, setMyComment] = useState("");
+
   useEffect(() => {
     setActiveIdx(0);
+    setMyRating(5);
+    setMyComment("");
   }, [product?.id]);
 
   if (!product) return null;
 
+  const list = reviewsByProduct[product.id] || [];
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-3xl rounded-3xl">
+      <DialogContent className="max-w-4xl rounded-3xl">
         <DialogHeader>
           <DialogTitle className="text-lg font-black">{product.title}</DialogTitle>
         </DialogHeader>
@@ -783,6 +718,7 @@ function ProductDialog({
               <Badge variant={product.stock > 10 ? "secondary" : "destructive"} className="rounded-full">
                 {product.stock > 10 ? "In stock" : "Limited"}
               </Badge>
+              <Badge className="rounded-full">COD</Badge>
             </div>
 
             <p className="mt-4 text-sm text-muted-foreground leading-relaxed">{product.desc}</p>
@@ -791,11 +727,87 @@ function ProductDialog({
               <Button className="rounded-2xl" onClick={() => onAdd(product)}>
                 Add to cart
               </Button>
-              <Button variant="secondary" className="rounded-2xl">
-                Buy now
+              <Button variant="secondary" className="rounded-2xl" onClick={() => onAdd(product)}>
+                Buy now (COD)
               </Button>
-              <div className="mt-2 text-xs text-muted-foreground">Delivery estimate: 2–4 days (demo)</div>
+              <div className="mt-2 text-xs text-muted-foreground">Payment: Cash on Delivery</div>
             </div>
+
+            {/* Reviews */}
+            <div className="mt-6 border rounded-3xl p-4">
+              <div className="flex items-center justify-between">
+                <div className="font-black">Ratings & Comments</div>
+                <Badge variant="secondary" className="rounded-full">
+                  {list.length} comment{list.length === 1 ? "" : "s"}
+                </Badge>
+              </div>
+
+              {!session ? (
+                <div className="mt-3 text-sm text-muted-foreground">Review দিতে হলে আগে Login করুন।</div>
+              ) : (
+                <div className="mt-3 space-y-2">
+                  <div className="text-sm font-semibold">Your rating</div>
+                  <div className="flex gap-2">
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <button
+                        key={n}
+                        onClick={() => setMyRating(n)}
+                        className={`h-10 w-10 rounded-2xl border grid place-items-center ${
+                          myRating >= n ? "bg-orange-500 text-white border-orange-500" : "bg-white"
+                        }`}
+                        title={`${n} star`}
+                      >
+                        <Star className="h-4 w-4" />
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="text-sm font-semibold">Comment</div>
+                  <textarea
+                    className="w-full rounded-2xl border bg-background px-3 py-2 text-sm min-h-20"
+                    value={myComment}
+                    onChange={(e) => setMyComment(e.target.value)}
+                    placeholder="Write your comment..."
+                  />
+
+                  <Button
+                    className="rounded-2xl"
+                    onClick={() => {
+                      const c = myComment.trim();
+                      if (!c) return;
+                      onSubmitReview(product.id, myRating, c);
+                      setMyComment("");
+                    }}
+                  >
+                    Submit review
+                  </Button>
+                </div>
+              )}
+
+              <div className="mt-4 space-y-3 max-h-56 overflow-auto pr-1">
+                {list.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">এখনো কোন কমেন্ট নেই।</div>
+                ) : (
+                  list
+                    .slice()
+                    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+                    .map((r) => (
+                      <div key={r.id} className="rounded-2xl border p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-sm font-semibold line-clamp-1">{r.userName}</div>
+                          <div className="text-xs text-muted-foreground">{new Date(r.createdAt).toLocaleString()}</div>
+                        </div>
+                        <div className="mt-1 flex items-center gap-2">
+                          <Stars value={r.rating} />
+                          <span className="text-xs text-muted-foreground">{r.rating}/5</span>
+                        </div>
+                        <div className="mt-2 text-sm">{r.comment}</div>
+                      </div>
+                    ))
+                )}
+              </div>
+            </div>
+            {/* end reviews */}
           </div>
         </div>
       </DialogContent>
@@ -803,86 +815,63 @@ function ProductDialog({
   );
 }
 
-function AuthDialog({
-  open,
-  setOpen,
-  setSession,
-}: {
-  open: boolean;
-  setOpen: (v: boolean) => void;
-  setSession: (s: any) => void;
-}) {
+function AuthDialog(props: { open: boolean; setOpen: (v: boolean) => void; setSession: (s: Session) => void }) {
+  const { open, setOpen, setSession } = props;
+
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [name, setName] = useState("Hanif");
-  const [email, setEmail] = useState("hanif@example.com");
-  const [password, setPassword] = useState("password");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [requestAdmin, setRequestAdmin] = useState(false);
   const [msg, setMsg] = useState<string>("");
 
-  function normalizeEmail(e: string) {
-    return (e || "").trim().toLowerCase();
-  }
+  useEffect(() => {
+    if (!open) {
+      setMsg("");
+      setMode("login");
+      setRequestAdmin(false);
+    }
+  }, [open]);
 
-  function login() {
-    setMsg("");
-    const e = normalizeEmail(email);
+  function doLoginOrSignup() {
+    const e = email.trim().toLowerCase();
+    const p = password;
 
-    // Owner admin
-    if (e === OWNER_ADMIN_EMAIL.toLowerCase() && password === OWNER_ADMIN_PASSWORD) {
-      setSession({ id: "owner_admin", name: name || "Owner", email: e, role: "owner" });
+    if (!e || !p) {
+      setMsg("Email এবং password দিন।");
+      return;
+    }
+
+    // ✅ Main admin exact login
+    if (e === MAIN_ADMIN_EMAIL.toLowerCase() && p === MAIN_ADMIN_PASSWORD) {
+      const admins = Array.from(new Set([MAIN_ADMIN_EMAIL.toLowerCase(), ...getApprovedAdmins().map((x) => x.toLowerCase())]));
+      setApprovedAdmins(admins);
+      setSession({ id: "main_admin", name: name || "Main Admin", email: e, role: "admin" });
       setOpen(false);
       return;
     }
 
-    const users = getUsers();
-    const u = users[e];
-    if (!u || u.password !== password) {
-      setMsg("ইমেইল বা পাসওয়ার্ড ভুল।");
+    // approved admins login (password demo)
+    const approved = getApprovedAdmins().map((x) => x.toLowerCase());
+    if (approved.includes(e) && p.length > 0) {
+      setSession({ id: `user_${e}`, name: name || "Admin", email: e, role: "admin" });
+      setOpen(false);
       return;
     }
 
-    const approved = getApprovedAdmins().includes(e);
-    setSession({ id: `user_${e}`, name: u.name || "User", email: e, role: approved ? "admin" : "customer" });
+    // if requesting admin but not approved: pending
+    if (requestAdmin) {
+      const pending = getPendingAdmins().map((x) => x.toLowerCase());
+      if (!pending.includes(e)) setPendingAdmins([...getPendingAdmins(), e]);
+      setSession({ id: `user_${e}`, name: name || "User", email: e, role: "pending_admin" });
+      setMsg("আপনার Admin request pending হয়েছে। Main Admin approve করলে Admin হবে।");
+      // keep dialog open so user can read message
+      return;
+    }
+
+    // normal customer
+    setSession({ id: `user_${e}`, name: name || "User", email: e, role: "customer" });
     setOpen(false);
-  }
-
-  function signup() {
-    setMsg("");
-    const e = normalizeEmail(email);
-    if (!e || !password) {
-      setMsg("ইমেইল এবং পাসওয়ার্ড দিন।");
-      return;
-    }
-
-    if (e === OWNER_ADMIN_EMAIL.toLowerCase()) {
-      setMsg("এই ইমেইল Owner Admin-এর জন্য reserved.");
-      return;
-    }
-
-    const users = getUsers();
-    if (users[e]) {
-      setMsg("এই ইমেইল আগে থেকেই আছে। Login করুন।");
-      return;
-    }
-
-    saveUser({ name: name || "User", email: e, password });
-    setMsg("Account তৈরি হয়েছে। এখন Login করুন।");
-    setMode("login");
-  }
-
-  function requestAdmin() {
-    setMsg("");
-    const e = normalizeEmail(email);
-    if (!e) {
-      setMsg("আগে ইমেইল লিখুন।");
-      return;
-    }
-    addAdminRequest({ email: e, name: name || "User", createdAt: new Date().toISOString() });
-    setMsg(`Admin access request পাঠানো হয়েছে: ${OWNER_ADMIN_EMAIL}`);
-  }
-
-  function submit() {
-    if (mode === "login") login();
-    else signup();
   }
 
   return (
@@ -893,23 +882,14 @@ function AuthDialog({
         </DialogHeader>
 
         <div className="space-y-3">
-          {mode === "signup" && (
-            <div>
-              <div className="text-sm font-semibold">Full name</div>
-              <Input className="rounded-2xl" value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
-          )}
-
-          {mode === "login" && (
-            <div>
-              <div className="text-sm font-semibold">Name (optional)</div>
-              <Input className="rounded-2xl" value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
-          )}
+          <div>
+            <div className="text-sm font-semibold">Full name</div>
+            <Input className="rounded-2xl" value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
 
           <div>
             <div className="text-sm font-semibold">Email</div>
-            <Input className="rounded-2xl" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <Input className="rounded-2xl" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" />
           </div>
 
           <div>
@@ -917,20 +897,19 @@ function AuthDialog({
             <Input type="password" className="rounded-2xl" value={password} onChange={(e) => setPassword(e.target.value)} />
           </div>
 
-          {msg && <div className="text-sm text-red-600">{msg}</div>}
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={requestAdmin} onChange={(e) => setRequestAdmin(e.target.checked)} />
+            Request admin access (Main Admin approval needed)
+          </label>
 
-          <Button className="w-full rounded-2xl" onClick={submit}>
+          {msg && <div className="rounded-2xl border p-3 text-sm text-muted-foreground">{msg}</div>}
+
+          <Button className="w-full rounded-2xl" onClick={doLoginOrSignup}>
             {mode === "login" ? "Login" : "Sign up"}
           </Button>
 
-          {mode === "login" && (
-            <Button variant="secondary" className="w-full rounded-2xl" onClick={requestAdmin}>
-              Request Admin Access (Owner approval)
-            </Button>
-          )}
-
           <div className="text-xs text-muted-foreground">
-            Demo only: Password localStorage-এ save হয়। Real project-এ backend + hashing লাগবে।
+            Main Admin: <b>{MAIN_ADMIN_EMAIL}</b> (only this email can approve admins)
           </div>
 
           <div className="flex justify-between text-sm">
@@ -954,7 +933,7 @@ function OrdersPage({ orders }: { orders: Order[] }) {
       <div className="mt-5 grid gap-4">
         {orders.length === 0 ? (
           <Card className="rounded-3xl">
-            <CardContent className="p-5 text-sm text-muted-foreground">No orders yet. Complete a checkout to see your order history.</CardContent>
+            <CardContent className="p-5 text-sm text-muted-foreground">No orders yet. Place a COD order to see history.</CardContent>
           </Card>
         ) : (
           orders.map((o) => (
@@ -967,6 +946,7 @@ function OrdersPage({ orders }: { orders: Order[] }) {
               </CardHeader>
               <CardContent className="p-5 pt-0">
                 <div className="text-sm text-muted-foreground">Placed: {new Date(o.createdAt).toLocaleString()}</div>
+                <div className="mt-1 text-xs text-muted-foreground">Payment: Cash on Delivery</div>
                 <div className="mt-2 font-black text-lg">{formatMoneyAED(o.total)}</div>
                 <div className="mt-3 grid gap-2">
                   {o.items.map((it) => (
@@ -985,17 +965,26 @@ function OrdersPage({ orders }: { orders: Order[] }) {
   );
 }
 
-function AdminPage({
-  products,
-  onCreateProduct,
-  onDeleteProduct,
-  session,
-}: {
+// file -> base64
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result || ""));
+    r.onerror = () => reject(new Error("File read failed"));
+    r.readAsDataURL(file);
+  });
+}
+
+function AdminPage(props: {
   products: Product[];
   onCreateProduct: (p: Product) => void;
   onDeleteProduct: (id: string) => void;
-  session: any;
+  session: Session;
 }) {
+  const { products, onCreateProduct, onDeleteProduct, session } = props;
+
+  const isMainAdmin = session?.email?.toLowerCase() === MAIN_ADMIN_EMAIL.toLowerCase();
+
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("Electronics");
   const [price, setPrice] = useState<number>(99);
@@ -1010,21 +999,7 @@ function AdminPage({
   const [videos, setVideos] = useState<string[]>([]);
   const [desc, setDesc] = useState("New product description...");
 
-  const [requests, setRequests] = useState<AdminRequest[]>([]);
-  const [approved, setApproved] = useState<string[]>([]);
-
-  const isOwner =
-    (session?.email || "").toLowerCase() === OWNER_ADMIN_EMAIL.toLowerCase() && session?.role === "owner";
-
-  useEffect(() => {
-    setRequests(getAdminRequests());
-    setApproved(getApprovedAdmins());
-  }, []);
-
-  function refreshApprovals() {
-    setRequests(getAdminRequests());
-    setApproved(getApprovedAdmins());
-  }
+  const fileRef = useRef<HTMLInputElement | null>(null);
 
   function addImageField() {
     setExtraImages((xs) => [...xs, ""]);
@@ -1036,12 +1011,6 @@ function AdminPage({
     setExtraImages((xs) => xs.filter((_, idx) => idx !== i));
   }
 
-  function setAsMainImage(url: string) {
-    const u = (url || "").trim();
-    if (!u) return;
-    setImgUrl(u);
-  }
-
   function addVideoField() {
     setVideos((xs) => [...xs, ""]);
   }
@@ -1050,6 +1019,14 @@ function AdminPage({
   }
   function removeVideoField(i: number) {
     setVideos((xs) => xs.filter((_, idx) => idx !== i));
+  }
+
+  async function onPickMainImage(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const dataUrl = await fileToDataUrl(f);
+    setImgUrl(dataUrl);
+    e.target.value = "";
   }
 
   function submit() {
@@ -1063,7 +1040,7 @@ function AdminPage({
       title,
       category,
       price: Number(price),
-      rating: 4.4,
+      rating: 0,
       reviews: 0,
       prime,
       stock: Number(stock),
@@ -1078,20 +1055,25 @@ function AdminPage({
     setVideos([]);
   }
 
-  function approve(email: string) {
-    approveAdmin(email);
-    removeAdminRequest(email);
-    refreshApprovals();
+  // admin approvals
+  const [pending, setPending] = useState<string[]>(() => getPendingAdmins());
+
+  function refreshPending() {
+    setPending(getPendingAdmins());
   }
 
-  function reject(email: string) {
-    removeAdminRequest(email);
-    refreshApprovals();
+  function approveAdmin(email: string) {
+    const e = email.toLowerCase();
+    const nextApproved = Array.from(new Set([...getApprovedAdmins().map((x) => x.toLowerCase()), e]));
+    setApprovedAdmins(nextApproved);
+    setPendingAdmins(getPendingAdmins().filter((x) => x.toLowerCase() !== e));
+    refreshPending();
   }
 
-  function revoke(email: string) {
-    removeApprovedAdmin(email);
-    refreshApprovals();
+  function denyAdmin(email: string) {
+    const e = email.toLowerCase();
+    setPendingAdmins(getPendingAdmins().filter((x) => x.toLowerCase() !== e));
+    refreshPending();
   }
 
   return (
@@ -1102,62 +1084,43 @@ function AdminPage({
           <div className="text-2xl font-black">Product Upload</div>
         </div>
         <Badge variant="secondary" className="rounded-full">
-          {isOwner ? "Owner admin" : "Admin"}
+          {isMainAdmin ? "Main Admin" : "Admin"}
         </Badge>
       </div>
 
-      {isOwner && (
-        <div className="mt-5 grid lg:grid-cols-2 gap-4">
-          <Card className="rounded-3xl">
-            <CardHeader>
-              <CardTitle>Admin Requests (Owner approval)</CardTitle>
-            </CardHeader>
-            <CardContent className="p-5 pt-0 space-y-3">
-              {requests.length === 0 ? (
-                <div className="text-sm text-muted-foreground">কোন pending request নেই।</div>
-              ) : (
-                requests.map((r) => (
-                  <div key={r.email} className="flex items-center justify-between gap-3 rounded-2xl border p-3">
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold line-clamp-1">{r.name}</div>
-                      <div className="text-xs text-muted-foreground line-clamp-1">{r.email}</div>
-                      <div className="text-[11px] text-muted-foreground">{new Date(r.createdAt).toLocaleString()}</div>
-                    </div>
+      {/* Main Admin Approval Panel */}
+      {isMainAdmin && (
+        <Card className="rounded-3xl mt-4">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5" /> Admin Approval Requests
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-5 pt-0">
+            {pending.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No pending admin requests.</div>
+            ) : (
+              <div className="space-y-2">
+                {pending.map((e) => (
+                  <div key={e} className="flex items-center justify-between gap-2 rounded-2xl border p-3">
+                    <div className="text-sm font-semibold">{e}</div>
                     <div className="flex gap-2">
-                      <Button className="rounded-2xl" onClick={() => approve(r.email)}>
+                      <Button className="rounded-2xl" onClick={() => approveAdmin(e)}>
                         Approve
                       </Button>
-                      <Button variant="secondary" className="rounded-2xl" onClick={() => reject(r.email)}>
-                        Reject
+                      <Button variant="secondary" className="rounded-2xl" onClick={() => denyAdmin(e)}>
+                        Deny
                       </Button>
                     </div>
                   </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-3xl">
-            <CardHeader>
-              <CardTitle>Approved Admins</CardTitle>
-            </CardHeader>
-            <CardContent className="p-5 pt-0 space-y-2">
-              {approved.length === 0 ? (
-                <div className="text-sm text-muted-foreground">এখনও কোন extra admin approve করা হয়নি।</div>
-              ) : (
-                approved.map((e) => (
-                  <div key={e} className="flex items-center justify-between gap-3 rounded-2xl border p-3">
-                    <div className="text-sm font-semibold">{e}</div>
-                    <Button variant="secondary" className="rounded-2xl" onClick={() => revoke(e)}>
-                      Remove
-                    </Button>
-                  </div>
-                ))
-              )}
-              <div className="text-xs text-muted-foreground">Note: এটি demo (localStorage). Real approval system-এর জন্য backend লাগবে।</div>
-            </CardContent>
-          </Card>
-        </div>
+                ))}
+                <Button variant="ghost" className="rounded-2xl" onClick={refreshPending}>
+                  Refresh
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       <div className="mt-5 grid lg:grid-cols-2 gap-4">
@@ -1205,16 +1168,21 @@ function AdminPage({
               </label>
             </div>
 
-            <div>
-              <div className="text-sm font-semibold">Main Image URL</div>
-              <div className="flex gap-2">
-                <Input className="rounded-2xl" value={imgUrl} onChange={(e) => setImgUrl(e.target.value)} />
-                <Button variant="secondary" className="rounded-2xl" type="button" onClick={() => setAsMainImage(imgUrl)}>
-                  Set
-                </Button>
+            {/* ✅ Main image: Upload button + URL */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-semibold">Main Image</div>
+                <div className="flex gap-2">
+                  <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPickMainImage} />
+                  <Button type="button" variant="secondary" className="rounded-2xl" onClick={() => fileRef.current?.click()}>
+                    <Upload className="h-4 w-4 mr-2" />
+                    Upload Image
+                  </Button>
+                </div>
               </div>
-              <div className="mt-2 text-xs text-muted-foreground">
-                Tip: নিচের extra images থেকে “Set as main” চাপলে main image হয়ে যাবে।
+              <Input className="rounded-2xl" value={imgUrl} onChange={(e) => setImgUrl(e.target.value)} placeholder="Paste image URL or use Upload button" />
+              <div className="rounded-2xl border p-2">
+                <img src={imgUrl} alt="preview" className="h-40 w-full object-cover rounded-2xl" />
               </div>
             </div>
 
@@ -1222,7 +1190,7 @@ function AdminPage({
               <div className="flex items-center justify-between">
                 <div className="text-sm font-semibold">More Pictures (multiple)</div>
                 <Button type="button" variant="secondary" className="rounded-2xl" onClick={addImageField}>
-                  + Add Picture
+                  + Add Picture URL
                 </Button>
               </div>
               {extraImages.length === 0 ? (
@@ -1231,15 +1199,7 @@ function AdminPage({
                 <div className="space-y-2">
                   {extraImages.map((val, i) => (
                     <div key={`img_${i}`} className="flex gap-2">
-                      <Input
-                        placeholder="https://...jpg"
-                        value={val}
-                        onChange={(e) => updateImageField(i, e.target.value)}
-                        className="rounded-2xl"
-                      />
-                      <Button type="button" variant="secondary" className="rounded-2xl" onClick={() => setAsMainImage(val)}>
-                        Set as main
-                      </Button>
+                      <Input placeholder="https://...jpg" value={val} onChange={(e) => updateImageField(i, e.target.value)} className="rounded-2xl" />
                       <Button type="button" variant="ghost" className="rounded-2xl" onClick={() => removeImageField(i)}>
                         Remove
                       </Button>
@@ -1289,7 +1249,7 @@ function AdminPage({
             <Button className="rounded-2xl" onClick={submit}>
               Create product
             </Button>
-            <div className="text-xs text-muted-foreground">Demo only. Real version: upload to storage + save to DB.</div>
+            <div className="text-xs text-muted-foreground">Demo only. Data saved in browser LocalStorage.</div>
           </CardContent>
         </Card>
 
@@ -1300,11 +1260,16 @@ function AdminPage({
           <CardContent className="p-5 pt-0">
             <div className="text-sm text-muted-foreground">Total products: {products.length}</div>
             <div className="mt-3 grid gap-3">
-              {products.slice(0, 8).map((p) => (
+              {products.slice(0, 10).map((p) => (
                 <div key={p.id} className="flex items-center gap-3 rounded-2xl border p-3">
-                  <button onClick={() => onDeleteProduct(p.id)} className="text-red-600 text-xs font-semibold mr-1">
-                    Delete
-                  </button>
+                  <Button
+                    variant="ghost"
+                    className="rounded-2xl text-red-600"
+                    onClick={() => onDeleteProduct(p.id)}
+                    title="Delete"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                   <img src={p.img} alt={p.title} className="h-12 w-12 rounded-2xl object-cover" />
                   <div className="flex-1">
                     <div className="text-sm font-semibold line-clamp-1">{p.title}</div>
@@ -1336,65 +1301,52 @@ export default function DragonMartOnline() {
   const [onlyPrime, setOnlyPrime] = useState(false);
   const [priceMax, setPriceMax] = useState(1500);
 
-  const [products, setProducts] = useState<Product[]>(() => {
-    try {
-      const raw = localStorage.getItem("dmo_products");
-      return raw ? JSON.parse(raw) : DEMO_PRODUCTS;
-    } catch {
-      return DEMO_PRODUCTS;
-    }
-  });
-
+  const [products, setProducts] = useState<Product[]>(() => safeJsonParse<Product[]>(localStorage.getItem("dmo_products"), DEMO_PRODUCTS));
   const [cartOpen, setCartOpen] = useState(false);
-  const [cart, setCart] = useState<Record<string, number>>(() => {
-    try {
-      const raw = localStorage.getItem("dmo_cart");
-      return raw ? JSON.parse(raw) : {};
-    } catch {
-      return {};
-    }
-  });
-
-  const [orders, setOrders] = useState<Order[]>(() => {
-    try {
-      const raw = localStorage.getItem("dmo_orders");
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [cart, setCart] = useState<Record<string, number>>(() => safeJsonParse(localStorage.getItem("dmo_cart"), {} as Record<string, number>));
+  const [orders, setOrders] = useState<Order[]>(() => safeJsonParse<Order[]>(localStorage.getItem("dmo_orders"), []));
 
   const [quickOpen, setQuickOpen] = useState(false);
   const [activeProduct, setActiveProduct] = useState<Product | null>(null);
-
   const [authOpen, setAuthOpen] = useState(false);
 
+  const [reviews, setReviewsState] = useState<Review[]>(() => getReviews());
+
   useEffect(() => {
-    try {
-      localStorage.setItem("dmo_cart", JSON.stringify(cart));
-    } catch {}
+    try { localStorage.setItem("dmo_cart", JSON.stringify(cart)); } catch {}
   }, [cart]);
+
   useEffect(() => {
-    try {
-      localStorage.setItem("dmo_orders", JSON.stringify(orders));
-    } catch {}
+    try { localStorage.setItem("dmo_orders", JSON.stringify(orders)); } catch {}
   }, [orders]);
+
   useEffect(() => {
-    try {
-      localStorage.setItem("dmo_products", JSON.stringify(products));
-    } catch {}
+    try { localStorage.setItem("dmo_products", JSON.stringify(products)); } catch {}
   }, [products]);
+
+  useEffect(() => {
+    setReviews(reviews);
+  }, [reviews]);
 
   const cartCount = useMemo(() => Object.values(cart).reduce((a, b) => a + b, 0), [cart]);
 
   const cartItems = useMemo(() => {
     const map = new Map(products.map((p) => [p.id, p] as const));
     return Object.entries(cart)
-      .map(([id, qty]) => ({ product: map.get(id)!, qty }))
-      .filter((x) => x.product);
+      .map(([id, qty]) => ({ product: map.get(id), qty }))
+      .filter((x): x is { product: Product; qty: number } => Boolean(x.product));
   }, [cart, products]);
 
   const subtotal = useMemo(() => cartItems.reduce((sum, { product, qty }) => sum + product.price * qty, 0), [cartItems]);
+
+  const reviewsByProduct = useMemo(() => {
+    const m: Record<string, Review[]> = {};
+    for (const r of reviews) {
+      if (!m[r.productId]) m[r.productId] = [];
+      m[r.productId].push(r);
+    }
+    return m;
+  }, [reviews]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -1412,11 +1364,10 @@ export default function DragonMartOnline() {
 
     if (sort === "featured") {
       list = list
-        .map((p) => ({ p, s: p.rating * 10 + clamp(p.stock, 0, 50) / 10 }))
+        .map((p) => ({ p, s: (p.rating || 0) * 10 + clamp(p.stock, 0, 50) / 10 }))
         .sort((a, b) => b.s - a.s)
         .map((x) => x.p);
     }
-
     return list;
   }, [query, category, sort, onlyPrime, priceMax, products]);
 
@@ -1424,11 +1375,9 @@ export default function DragonMartOnline() {
     setCart((c) => ({ ...c, [p.id]: (c[p.id] || 0) + 1 }));
     setCartOpen(true);
   }
-
   function inc(id: string) {
     setCart((c) => ({ ...c, [id]: (c[id] || 0) + 1 }));
   }
-
   function dec(id: string) {
     setCart((c) => {
       const next = { ...c };
@@ -1438,7 +1387,6 @@ export default function DragonMartOnline() {
       return next;
     });
   }
-
   function remove(id: string) {
     setCart((c) => {
       const next = { ...c };
@@ -1460,12 +1408,44 @@ export default function DragonMartOnline() {
   function createProduct(p: Product) {
     setProducts((prev) => [p, ...prev]);
   }
-
   function deleteProduct(id: string) {
     setProducts((prev) => prev.filter((p) => p.id !== id));
   }
 
-  async function checkoutStripeDemo() {
+  function submitReview(productId: string, rating: number, comment: string) {
+    if (!session) return;
+
+    const r: Review = {
+      id: `r_${Math.random().toString(16).slice(2)}`,
+      productId,
+      userEmail: session.email,
+      userName: session.name,
+      rating: clamp(rating, 1, 5),
+      comment,
+      createdAt: new Date().toISOString(),
+    };
+
+    const nextReviews = [...reviews, r];
+    setReviewsState(nextReviews);
+
+    // update product avg rating + count based on stored reviews
+    const list = nextReviews.filter((x) => x.productId === productId);
+    const avg = list.reduce((s, x) => s + x.rating, 0) / Math.max(list.length, 1);
+
+    setProducts((prev) =>
+      prev.map((p) =>
+        p.id === productId
+          ? {
+              ...p,
+              rating: Number.isFinite(avg) ? Number(avg.toFixed(2)) : p.rating,
+              reviews: list.length,
+            }
+          : p
+      )
+    );
+  }
+
+  async function checkoutCOD() {
     if (!session) {
       setAuthOpen(true);
       return;
@@ -1474,7 +1454,7 @@ export default function DragonMartOnline() {
     const order: Order = {
       id: Math.floor(100000 + Math.random() * 900000).toString(),
       createdAt: new Date().toISOString(),
-      status: "Processing",
+      status: "COD - Pending",
       total: subtotal,
       items: cartItems.map(({ product, qty }) => ({
         productId: product.id,
@@ -1483,6 +1463,7 @@ export default function DragonMartOnline() {
         price: product.price,
       })),
       userEmail: session.email,
+      paymentMethod: "COD",
     };
 
     setOrders((o) => [order, ...o]);
@@ -1491,7 +1472,8 @@ export default function DragonMartOnline() {
     setPage("orders");
   }
 
-  const guardAdmin = session?.role === "admin" || session?.role === "owner";
+  // guard: only admin (not pending_admin)
+  const canAdmin = session?.role === "admin";
 
   return (
     <div className="min-h-screen bg-orange-50">
@@ -1530,7 +1512,7 @@ export default function DragonMartOnline() {
                   {filtered.length} result{filtered.length === 1 ? "" : "s"}
                 </div>
               </div>
-              <div className="text-xs text-muted-foreground">Tip: try search “lamp”, “book”, “prime”…</div>
+              <div className="text-xs text-muted-foreground">Tip: try search “bag”, “luggage”, “prime”…</div>
             </div>
 
             <motion.div layout className="mt-5 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1551,9 +1533,9 @@ export default function DragonMartOnline() {
 
             <div className="mt-10 grid md:grid-cols-3 gap-4">
               {[
-                { icon: Truck, title: "Fast delivery", text: "Prime items arrive quicker. (Demo UI)" },
-                { icon: ShieldCheck, title: "Secure checkout", text: "Connect Stripe for real payments." },
-                { icon: RotateCcw, title: "Easy returns", text: "Add return policy pages & order tracking." },
+                { icon: Truck, title: "Fast delivery", text: "Demo UI — you can connect real delivery later." },
+                { icon: ShieldCheck, title: "Cash on Delivery", text: "Currently COD only (as requested)." },
+                { icon: RotateCcw, title: "Easy returns", text: "Add return policy pages & order tracking later." },
               ].map((b) => (
                 <Card key={b.title} className="rounded-3xl">
                   <CardHeader>
@@ -1567,23 +1549,28 @@ export default function DragonMartOnline() {
             </div>
 
             <footer className="mt-12 text-center text-xs text-muted-foreground">
-              Dragon Mart Online — starter template. Plug a backend (Supabase/Firebase/Node) to go live.
+              Dragon Mart Online — demo template (LocalStorage). Plug backend later for production.
             </footer>
           </div>
         </>
       )}
 
-      {page === "orders" && <OrdersPage orders={orders.filter((o) => !session || o.userEmail === session.email)} />}
+      {page === "orders" && (
+        <OrdersPage orders={orders.filter((o) => !session || o.userEmail === session.email)} />
+      )}
 
       {page === "admin" &&
-        (guardAdmin ? (
+        (canAdmin ? (
           <AdminPage products={products} onCreateProduct={createProduct} onDeleteProduct={deleteProduct} session={session} />
         ) : (
           <div className="mx-auto max-w-6xl px-4 pt-6 pb-12">
             <Card className="rounded-3xl">
               <CardContent className="p-6">
                 <div className="text-2xl font-black">Admin access required</div>
-                <div className="mt-2 text-sm text-muted-foreground">Please login as an admin to upload products.</div>
+                <div className="mt-2 text-sm text-muted-foreground">
+                  Please login as an admin to upload products.
+                  {session?.role === "pending_admin" ? " (Your request is pending Main Admin approval.)" : ""}
+                </div>
                 <div className="mt-4 flex gap-2">
                   <Button className="rounded-2xl" onClick={() => setAuthOpen(true)}>
                     Login
@@ -1605,10 +1592,18 @@ export default function DragonMartOnline() {
         onDec={dec}
         onRemove={remove}
         total={subtotal}
-        onCheckout={checkoutStripeDemo}
+        onCheckout={checkoutCOD}
       />
 
-      <ProductDialog open={quickOpen} setOpen={setQuickOpen} product={activeProduct} onAdd={addToCart} />
+      <ProductDialog
+        open={quickOpen}
+        setOpen={setQuickOpen}
+        product={activeProduct}
+        onAdd={addToCart}
+        session={session}
+        reviewsByProduct={reviewsByProduct}
+        onSubmitReview={submitReview}
+      />
 
       <AuthDialog open={authOpen} setOpen={setAuthOpen} setSession={setSession} />
     </div>
